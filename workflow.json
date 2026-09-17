@@ -1,0 +1,1802 @@
+{
+  "name": "Executive Business Operations Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "readStatus": "unread"
+        },
+        "options": {}
+      },
+      "id": "YOUR_ID_HERE",
+      "name": "Gmail — New Email Received",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        560,
+        336
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f1",
+              "name": "email_sender",
+              "value": "={{ $json.from }}",
+              "type": "string"
+            },
+            {
+              "id": "f2",
+              "name": "email_subject",
+              "value": "={{ $json.subject }}",
+              "type": "string"
+            },
+            {
+              "id": "f3",
+              "name": "email_body",
+              "value": "={{ $json.text ?? $json.snippet ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "f4",
+              "name": "email_date",
+              "value": "={{ $json.date }}",
+              "type": "string"
+            },
+            {
+              "id": "f5",
+              "name": "email_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "f6",
+              "name": "thread_id",
+              "value": "={{ $json.threadId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "YOUR_ID_HERE",
+      "name": "Extract Email Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        736,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Classify this email:\n\nFrom: {{ $json.email_sender }}\nSubject: {{ $json.email_subject }}\nBody: {{ $json.email_body }}\n\nReturn JSON with: category (action-required|FYI|meeting-request|newsletter|urgent), priority_score (1-10), summary (2 lines), action_needed (string), has_meeting_request (boolean), meeting_details (string).",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are an executive assistant AI. Analyze emails and classify them. Score urgency 1-10: VIP senders (CEO, board, clients) +3, keywords (deadline, ASAP, today, urgent, contract) +2. Return valid JSON matching the schema exactly."
+        }
+      },
+      "id": "04cff180-20b6-41b3-936a-127ab48ca3f9",
+      "name": "AI Email Classifier",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        896,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"category\":\"action-required\",\"priority_score\":8,\"summary\":\"CEO needs Q4 board report by 3 PM today\",\"action_needed\":\"Send Q4 board report\",\"has_meeting_request\":false,\"meeting_details\":\"\"}"
+      },
+      "id": "YOUR_ID_HERE",
+      "name": "Email Classification Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1120,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\nreturn items.map(item => {\n  let parsed = {};\n  try {\n    const raw = item.json.output || '{}';\n    parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;\n  } catch(e) {\n    parsed = { category: 'FYI', priority_score: 3, summary: 'Parse error', action_needed: '', has_meeting_request: false, meeting_details: '' };\n  }\n  return {\n    json: {\n      email_sender: item.json.email_sender ?? '',\n      email_subject: item.json.email_subject ?? '',\n      email_body: item.json.email_body ?? '',\n      email_date: item.json.email_date ?? '',\n      email_id: item.json.email_id ?? '',\n      thread_id: item.json.thread_id ?? '',\n      category: parsed.category || 'FYI',\n      priority_score: parsed.priority_score || 3,\n      summary: parsed.summary || '',\n      action_needed: parsed.action_needed || '',\n      has_meeting_request: parsed.has_meeting_request || false,\n      meeting_details: parsed.meeting_details || ''\n    }\n  };\n});\n"
+      },
+      "id": "YOUR_ID_HERE",
+      "name": "Parse Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.category }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "urgent"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "urgent"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.category }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "action-required"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "action-required"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.category }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "meeting-request"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "meeting-request"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "FYI / Other"
+        }
+      },
+      "id": "9e453466-3643-4f1f-b0e2-5cb133b49bdc",
+      "name": "Route by Category",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1392,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "YOUR_AUTHENTICATION_HERE",
+        "workspace": "<__PLACEHOLDER_VALUE__Paste your Asana Workspace ID here__>",
+        "name": "={{ $json.email_subject }}",
+        "otherProperties": {
+          "due_on": "={{ $now.plus({days: 1}).toFormat(\"yyyy-MM-dd\") }}",
+          "notes": "=From: {{ $json.email_sender }}\n\nSummary: {{ $json.summary }}\n\nAction Needed: {{ $json.action_needed }}"
+        }
+      },
+      "id": "YOUR_ID_HERE",
+      "name": "Create Asana Task",
+      "type": "n8n-nodes-base.asana",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        224
+      ],
+      "credentials": {
+        "asanaOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "at1",
+              "name": "action_taken",
+              "value": "task-created-urgent",
+              "type": "string"
+            },
+            {
+              "id": "at2",
+              "name": "task_id",
+              "value": "={{ $json.gid ?? \"\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "9097af42-7268-4b27-b93c-f42eba3c3214",
+      "name": "Set Urgent Action Taken",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1968,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "m.asadullah95e@gmail.com",
+        "subject": "=[URGENT P{{ $('Parse Classification').item.json.priority_score }}] {{ $('Parse Classification').item.json.email_subject }}",
+        "emailType": "text",
+        "message": "=URGENT EMAIL ALERT\n\nFrom: {{ $('Parse Classification').item.json.email_sender }}\nSubject: {{ $('Parse Classification').item.json.email_subject }}\nPriority: {{ $('Parse Classification').item.json.priority_score }}/10\n\nSummary:\n{{ $('Parse Classification').item.json.summary }}\n\nAction Needed:\n{{ $('Parse Classification').item.json.action_needed }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "abe90bd2-52bd-4efd-99d8-2a4707369a92",
+      "name": "Send Urgent Email Alert",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2240,
+        192
+      ],
+      "webhookId": "YOUR_WEBHOOKID_HERE",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "id": "YOUR_ID_HERE",
+      "name": "Merge All Branches",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2256,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "at3",
+              "name": "action_taken",
+              "value": "task-created",
+              "type": "string"
+            },
+            {
+              "id": "at4",
+              "name": "task_id",
+              "value": "={{ $json.gid ?? \"\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "18d53268-3bb3-4f4e-9bc1-6ec3cecb39a2",
+      "name": "Set Action-Required Taken",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1968,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "cachedResultName": "Family",
+          "mode": "list",
+          "value": "family06966008392122907400@group.calendar.google.com"
+        },
+        "start": "={{ $now.toISO() }}",
+        "end": "={{ $now.plus({minutes: 30}).toISO() }}",
+        "additionalFields": {
+          "attendees": [
+            "={{ $json.email_sender }}"
+          ],
+          "description": "=Meeting requested via email.\n\nDetails: {{ $json.meeting_details }}\n\nFrom: {{ $json.email_sender }}",
+          "sendUpdates": "all",
+          "summary": "={{ $json.email_subject }}"
+        }
+      },
+      "id": "97bded6a-a79f-4925-9623-fbfea9ec1757",
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1680,
+        384
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "at5",
+              "name": "action_taken",
+              "value": "meeting-scheduled",
+              "type": "string"
+            },
+            {
+              "id": "at6",
+              "name": "calendar_event_id",
+              "value": "={{ $json.id ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "at7",
+              "name": "task_id",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "d917dd8f-e0e5-4bd5-8719-80236b9e5277",
+      "name": "Set Meeting Action Taken",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1968,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "at8",
+              "name": "action_taken",
+              "value": "logged",
+              "type": "string"
+            },
+            {
+              "id": "at9",
+              "name": "task_id",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "at10",
+              "name": "calendar_event_id",
+              "value": "",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "cad42c15-00e1-47c7-b57a-0771b04014af",
+      "name": "Set FYI Action Taken",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1680,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "cachedResultName": "Executive Business Operations Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1FuC09hikQQCNUrx0pL7KPu5_W3L_arPk0wdKY0OFk-c/edit?usp=drivesdk",
+          "mode": "list",
+          "value": "YOUR_VALUE_HERE"
+        },
+        "sheetName": {
+          "__rl": true,
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1FuC09hikQQCNUrx0pL7KPu5_W3L_arPk0wdKY0OFk-c/edit#gid=0",
+          "mode": "list",
+          "value": "gid=0"
+        },
+        "columns": {
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false,
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "schema": [
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Timestamp",
+              "id": "Timestamp",
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Email_sender",
+              "id": "Email_sender",
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Email_subject",
+              "id": "Email_subject",
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Priority_score",
+              "id": "Priority_score",
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Category",
+              "id": "Category",
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Summary",
+              "id": "Summary",
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Action_taken",
+              "id": "Action_taken",
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Task_id",
+              "id": "Task_id",
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Calendar_event_id",
+              "id": "Calendar_event_id",
+              "removed": false,
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Status",
+              "id": "Status",
+              "removed": false,
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Action_taken": "={{ $json.action_taken }}",
+            "Calendar_event_id": "={{ $json.calendar_event_id ?? '' }}",
+            "Category": "={{ $json.category }}",
+            "Email_sender": "={{ $json.email_sender }}",
+            "Email_subject": "={{ $json.email_subject }}",
+            "Priority_score": "={{ $json.priority_score }}",
+            "Status": "pending",
+            "Summary": "={{ $json.summary }}",
+            "Task_id": "={{ $json.task_id ?? '' }}",
+            "Timestamp": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "YOUR_ID_HERE",
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2432,
+        432
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "YOUR_ID_HERE",
+      "name": "Schedule — 7AM Morning Brief",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        144,
+        816
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "family06966008392122907400@group.calendar.google.com",
+          "mode": "list",
+          "cachedResultName": "Family"
+        },
+        "returnAll": true,
+        "timeMin": "={{ $today.toISO() }}",
+        "timeMax": "={{ $today.plus({days: 1}).toISO() }}",
+        "options": {}
+      },
+      "id": "2b5ebf85-0fe7-4109-a7bd-b972df685a50",
+      "name": "Fetch Today Calendar Events",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        384,
+        688
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "YOUR_ID_HERE",
+      "name": "Merge Morning Data",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        656,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_VALUE_HERE",
+          "mode": "list",
+          "cachedResultName": "Executive Business Operations Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1FuC09hikQQCNUrx0pL7KPu5_W3L_arPk0wdKY0OFk-c/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1FuC09hikQQCNUrx0pL7KPu5_W3L_arPk0wdKY0OFk-c/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": []
+        },
+        "options": {}
+      },
+      "id": "6b4e5193-a223-4393-9708-0553331c6bb3",
+      "name": "Fetch Pending Tasks from Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        384,
+        960
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst allItems = $input.all();\nconst calItems  = allItems.filter(i => i.json.summary && i.json.start);\nconst taskItems = allItems.filter(i => i.json.email_subject && i.json.status === 'pending');\n\nconst meetings = calItems.length\n  ? calItems.map(i => '  • ' + i.json.summary + ' at ' + (i.json.start?.dateTime || i.json.start?.date || 'TBD')).join('\\n')\n  : '  No meetings scheduled today';\n\nconst tasks = taskItems.length\n  ? taskItems.sort((a,b) => Number(b.json.priority_score||0) - Number(a.json.priority_score||0))\n      .slice(0, 5)\n      .map(i => '  • [P' + (i.json.priority_score||0) + '] ' + i.json.email_subject).join('\\n')\n  : '  No pending tasks';\n\nconst today = new Date().toDateString();\nconst brief = 'Good morning!\\n\\nYour Executive Brief for ' + today + '\\n\\n' +\n  '📅 TODAY\\'S MEETINGS (' + calItems.length + '):\\n' + meetings + '\\n\\n' +\n  '⚡ TOP PRIORITY TASKS (' + taskItems.length + ' pending):\\n' + tasks + '\\n\\n' +\n  'Have a productive day!';\n\nreturn [{ json: {\n  brief,\n  subject: 'Morning Brief — ' + today,\n  meetings_count: calItems.length,\n  tasks_count: taskItems.length\n}}];\n"
+      },
+      "id": "24a9c669-3368-4112-987d-7f498bfd6551",
+      "name": "Compose Morning Brief",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "m.asadullah95e@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.brief }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "f9a378ee-211f-4d1a-970f-cf44d531c93a",
+      "name": "Send Morning Brief Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1072,
+        832
+      ],
+      "webhookId": "YOUR_WEBHOOKID_HERE",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 18 * * *"
+            }
+          ]
+        }
+      },
+      "id": "b944109a-3ab9-4cc1-aac3-80831414b04a",
+      "name": "Schedule — 6PM EOD Summary",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        1312,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_VALUE_HERE",
+          "mode": "list",
+          "cachedResultName": "Executive Business Operations Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1FuC09hikQQCNUrx0pL7KPu5_W3L_arPk0wdKY0OFk-c/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1FuC09hikQQCNUrx0pL7KPu5_W3L_arPk0wdKY0OFk-c/edit#gid=0"
+        },
+        "options": {}
+      },
+      "id": "d181c5a7-8ec3-4175-9ce7-8b98dd4eba1c",
+      "name": "Fetch EOD Activity from Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1520,
+        832
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\nconst today = new Date().toDateString();\nconst todayItems = items.filter(i => {\n  const ts = i.json.timestamp;\n  return ts && new Date(ts).toDateString() === today;\n});\n\nconst done    = todayItems.filter(i => i.json.status === 'done').length;\nconst pending = todayItems.filter(i => i.json.status === 'pending').length;\nconst urgent  = todayItems.filter(i => i.json.category === 'urgent').length;\nconst meetings= todayItems.filter(i => i.json.category === 'meeting-request').length;\nconst tasks   = todayItems.filter(i => i.json.action_taken && i.json.action_taken.includes('task')).length;\n\nconst completedList = todayItems.filter(i=>i.json.status==='done')\n  .map(i => '  • ' + i.json.email_subject).join('\\n') || '  None';\nconst pendingList = todayItems.filter(i=>i.json.status==='pending')\n  .map(i => '  • [P' + (i.json.priority_score||0) + '] ' + i.json.email_subject).join('\\n') || '  None';\n\nconst summary =\n  'EOD Executive Summary — ' + today + '\\n\\n' +\n  '📊 TODAY\\'S ACTIVITY STATS\\n' +\n  '  • Total emails processed: ' + todayItems.length + '\\n' +\n  '  • Urgent items handled: ' + urgent + '\\n' +\n  '  • Tasks created in Asana: ' + tasks + '\\n' +\n  '  • Meetings scheduled: ' + meetings + '\\n' +\n  '  • Completed: ' + done + '  |  Pending: ' + pending + '\\n\\n' +\n  '✅ COMPLETED TODAY\\n' + completedList + '\\n\\n' +\n  '⏳ PENDING FOR TOMORROW\\n' + pendingList + '\\n\\nGreat work today!';\n\nreturn [{ json: { summary, subject: 'EOD Summary — ' + today, total: todayItems.length } }];\n"
+      },
+      "id": "YOUR_ID_HERE",
+      "name": "Compose EOD Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1744,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "m.asadullah95e@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.summary }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "YOUR_ID_HERE",
+      "name": "Send EOD Summary Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1952,
+        832
+      ],
+      "webhookId": "YOUR_WEBHOOKID_HERE",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 17 * * 5"
+            }
+          ]
+        }
+      },
+      "id": "ef6bdaaf-58dd-4814-ad91-89491f40d9bd",
+      "name": "Schedule — Friday 5PM Weekly Report",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        2208,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_VALUE_HERE",
+          "mode": "list",
+          "cachedResultName": "Executive Business Operations Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1FuC09hikQQCNUrx0pL7KPu5_W3L_arPk0wdKY0OFk-c/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1FuC09hikQQCNUrx0pL7KPu5_W3L_arPk0wdKY0OFk-c/edit#gid=0"
+        },
+        "options": {}
+      },
+      "id": "54cb1ceb-464f-4de8-8dba-a6dd6806e704",
+      "name": "Fetch Weekly Data from Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2416,
+        832
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\nconst now = new Date();\nconst weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);\n\nconst weekItems = items.filter(i => {\n  const ts = i.json.timestamp;\n  return ts && new Date(ts) >= weekAgo;\n});\n\nconst byCategory = {};\nweekItems.forEach(i => {\n  const cat = i.json.category || 'other';\n  byCategory[cat] = (byCategory[cat] || 0) + 1;\n});\n\nconst totalEmails     = weekItems.length;\nconst tasksCreated    = weekItems.filter(i => (i.json.action_taken||'').includes('task')).length;\nconst meetingsSched   = weekItems.filter(i => i.json.category === 'meeting-request').length;\nconst urgentHandled   = weekItems.filter(i => i.json.category === 'urgent').length;\nconst done            = weekItems.filter(i => i.json.status === 'done').length;\nconst completionRate  = totalEmails > 0 ? Math.round((done / totalEmails) * 100) : 0;\n\nconst catBreakdown = Object.entries(byCategory)\n  .map(([k,v]) => '    • ' + k + ': ' + v + ' emails').join('\\n') || '    • No data';\n\nconst report =\n  '═══════════════════════════════════════\\n' +\n  '  WEEKLY EXECUTIVE OPERATIONS REPORT\\n' +\n  '  Week of ' + weekAgo.toDateString() + ' – ' + now.toDateString() + '\\n' +\n  '═══════════════════════════════════════\\n\\n' +\n  '📈 KEY METRICS\\n' +\n  '  • Total Emails Processed : ' + totalEmails + '\\n' +\n  '  • Asana Tasks Created    : ' + tasksCreated + '\\n' +\n  '  • Meetings Scheduled     : ' + meetingsSched + '\\n' +\n  '  • Urgent Items Handled   : ' + urgentHandled + '\\n' +\n  '  • Overall Completion Rate: ' + completionRate + '%\\n\\n' +\n  '📊 EMAIL BREAKDOWN BY CATEGORY\\n' + catBreakdown + '\\n\\n' +\n  '═══════════════════════════════════════\\n' +\n  'Generated by Executive Business Operations Agent';\n\nreturn [{ json: { report, subject: 'Weekly Ops Report — ' + now.toDateString(), total_emails: totalEmails, completion_rate: completionRate } }];\n"
+      },
+      "id": "f33af36f-4b2a-43ea-a082-14eaed92d114",
+      "name": "Compose Weekly Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        832
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "m.asadullah95e@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.report }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "4108b62d-388d-4d59-bcf4-3f9c48cb1a11",
+      "name": "Send Weekly Report Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2864,
+        832
+      ],
+      "webhookId": "YOUR_WEBHOOKID_HERE",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "ministral-3b-2512",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatMistralCloud",
+      "typeVersion": 1,
+      "position": [
+        896,
+        544
+      ],
+      "id": "d8909834-0bcf-4cd8-867f-116dfd5572bc",
+      "name": "Mistral Cloud Chat Model",
+      "credentials": {
+        "mistralCloudApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "sc-trigger-01",
+      "name": "Schedule — Status Check Every 30 Min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        368,
+        1184
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "cachedResultName": "Executive Business Operations Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1FuC09hikQQCNUrx0pL7KPu5_W3L_arPk0wdKY0OFk-c/edit?usp=drivesdk",
+          "mode": "list",
+          "value": "YOUR_VALUE_HERE"
+        },
+        "sheetName": {
+          "__rl": true,
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1FuC09hikQQCNUrx0pL7KPu5_W3L_arPk0wdKY0OFk-c/edit#gid=0",
+          "mode": "list",
+          "value": "gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Status",
+              "lookupValue": "pending"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "sc-read-01",
+      "name": "Read Pending Rows",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        560,
+        1184
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": 1,
+        "simple": false,
+        "filters": {
+          "q": "=from:{{ $json.Email_sender }} subject:{{ $json.Email_subject }} newer_than:3d",
+          "readStatus": "both"
+        },
+        "options": {}
+      },
+      "id": "sc-gmail-search-01",
+      "name": "Search Gmail for Reply",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        752,
+        1184
+      ],
+      "webhookId": "aae0373d-ec60-405e-8de9-92a2524395d5",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.id }}",
+              "operator": {
+                "operation": "isNotEmpty",
+                "type": "string"
+              }
+            }
+          ],
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "sc-has-reply-01",
+      "name": "Has Reply?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        928,
+        1184
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "mistralai/mistral-7b-instruct:free"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "sc-lm-01",
+      "name": "OpenRouter Model (Status)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1184,
+        1424
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"new_status\":\"approved\",\"reason\":\"Sender confirmed approval in reply\"}"
+      },
+      "id": "sc-parser-01",
+      "name": "Status Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1184,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze this reply email and determine the new status of the original task.\n\nOriginal Subject: {{ $('Read Pending Rows').item.json.Email_subject }}\nOriginal Summary: {{ $('Read Pending Rows').item.json.Summary }}\n\nReply From: {{ $json.from?.value?.[0]?.address ?? $json.from }}\nReply Text: {{ $json.text ?? $json.snippet ?? \"\" }}\n\nClassify the reply intent:\n- \"approved\" — sender confirms, approves, says yes, looks good, proceed, done, confirmed\n- \"escalated\" — sender says urgent, escalate, critical, needs immediate attention, emergency\n- \"pending\" — reply is unclear, asks a question, or does not change the task status\n\nReturn JSON with new_status and reason.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are an executive assistant AI. Read reply emails and determine if the original pending task has been done, escalated, or remains pending. Be conservative — only mark done if clearly confirmed, only escalated if clearly urgent."
+        }
+      },
+      "id": "sc-ai-classify-01",
+      "name": "AI Classify Reply Intent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1120,
+        1168
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst items = $input.all();\nreturn items.map(item => {\n  let parsed = {};\n  try {\n    const raw = item.json.output || '{}';\n    parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;\n  } catch(e) {\n    parsed = { new_status: 'pending', reason: 'Parse error' };\n  }\n  const validStatuses = ['approved', 'escalated', 'pending'];\n  const newStatus = validStatuses.includes(parsed.new_status) ? parsed.new_status : 'pending';\n  return {\n    json: {\n      ...item.json,\n      new_status: newStatus,\n      reason: parsed.reason || '',\n      Email_subject: item.json.Email_subject || '',\n      Email_sender: item.json.Email_sender || '',\n      Action_taken: item.json.Action_taken || ''\n    }\n  };\n});\n"
+      },
+      "id": "sc-parse-code-01",
+      "name": "Parse Status Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1424,
+        1168
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.new_status }}",
+              "operator": {
+                "operation": "notEquals",
+                "type": "string"
+              },
+              "rightValue": "pending",
+              "id": "beddaa94-b9c4-44b6-9fa0-57634bc35072"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "sc-status-changed-01",
+      "name": "Status Changed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1632,
+        1168
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "cachedResultName": "Executive Business Operations Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1FuC09hikQQCNUrx0pL7KPu5_W3L_arPk0wdKY0OFk-c/edit?usp=drivesdk",
+          "mode": "list",
+          "value": "YOUR_VALUE_HERE"
+        },
+        "sheetName": {
+          "__rl": true,
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1FuC09hikQQCNUrx0pL7KPu5_W3L_arPk0wdKY0OFk-c/edit#gid=0",
+          "mode": "list",
+          "value": "gid=0"
+        },
+        "columns": {
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false,
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "Email_subject",
+            "Email_sender"
+          ],
+          "schema": [
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Timestamp",
+              "id": "Timestamp",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "Email_sender",
+              "id": "Email_sender",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": true,
+              "display": true,
+              "displayName": "Email_subject",
+              "id": "Email_subject",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Priority_score",
+              "id": "Priority_score",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Category",
+              "id": "Category",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Summary",
+              "id": "Summary",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Action_taken",
+              "id": "Action_taken",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Task_id",
+              "id": "Task_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": false,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Calendar_event_id",
+              "id": "Calendar_event_id",
+              "required": false,
+              "type": "string"
+            },
+            {
+              "canBeUsedToMatch": true,
+              "defaultMatch": false,
+              "display": true,
+              "displayName": "Status",
+              "id": "Status",
+              "required": false,
+              "type": "string"
+            }
+          ],
+          "value": {
+            "Action_taken": "={{ $json.Action_taken + ' → ' + $json.new_status }}",
+            "Email_sender": "={{ $json.Email_sender }}",
+            "Email_subject": "={{ $json.Email_subject }}",
+            "Status": "={{ $json.new_status }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "sc-update-sheet-01",
+      "name": "Update Status in Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1824,
+        1072
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "m.asadullah95e@gmail.com",
+        "subject": "=[{{ $('Parse Status Result').item.json.new_status.toUpperCase() }}] {{ $('Parse Status Result').item.json.Email_subject }}",
+        "emailType": "text",
+        "message": "=STATUS UPDATE\n\nTask: {{ $('Parse Status Result').item.json.Email_subject }}\nFrom: {{ $('Parse Status Result').item.json.Email_sender }}\n\nNew Status: {{ $('Parse Status Result').item.json.new_status.toUpperCase() }}\nReason: {{ $('Parse Status Result').item.json.reason }}\n\nThis status was automatically detected from a reply email.",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "sc-notify-01",
+      "name": "Send Status Notification",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2032,
+        1152
+      ],
+      "webhookId": "790f34a7-dc8a-4da6-a204-b4026709a406",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "REPLACE_WITH_YOUR_CREDENTIAL_NAME"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1840,
+        1280
+      ],
+      "id": "f2f44e69-4192-4d7b-9edc-c5f6e6d36fce",
+      "name": "No Operation, do nothing"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Gmail — New Email Received": {
+      "main": [
+        [
+          {
+            "node": "Extract Email Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Email Fields": {
+      "main": [
+        [
+          {
+            "node": "AI Email Classifier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Email Classifier": {
+      "main": [
+        [
+          {
+            "node": "Parse Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Classification Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Email Classifier",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Classification": {
+      "main": [
+        [
+          {
+            "node": "Route by Category",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Category": {
+      "main": [
+        [
+          {
+            "node": "Create Asana Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Asana Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set FYI Action Taken",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Asana Task": {
+      "main": [
+        [
+          {
+            "node": "Set Urgent Action Taken",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set Action-Required Taken",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Urgent Action Taken": {
+      "main": [
+        [
+          {
+            "node": "Send Urgent Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Urgent Email Alert": {
+      "main": [
+        [
+          {
+            "node": "Merge All Branches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge All Branches": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Action-Required Taken": {
+      "main": [
+        [
+          {
+            "node": "Merge All Branches",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Create Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Set Meeting Action Taken",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Meeting Action Taken": {
+      "main": [
+        [
+          {
+            "node": "Merge All Branches",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Set FYI Action Taken": {
+      "main": [
+        [
+          {
+            "node": "Merge All Branches",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Schedule — 7AM Morning Brief": {
+      "main": [
+        [
+          {
+            "node": "Fetch Today Calendar Events",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Pending Tasks from Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Today Calendar Events": {
+      "main": [
+        [
+          {
+            "node": "Merge Morning Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Morning Data": {
+      "main": [
+        [
+          {
+            "node": "Compose Morning Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Pending Tasks from Sheet": {
+      "main": [
+        [
+          {
+            "node": "Merge Morning Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Compose Morning Brief": {
+      "main": [
+        [
+          {
+            "node": "Send Morning Brief Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule — 6PM EOD Summary": {
+      "main": [
+        [
+          {
+            "node": "Fetch EOD Activity from Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch EOD Activity from Sheet": {
+      "main": [
+        [
+          {
+            "node": "Compose EOD Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose EOD Summary": {
+      "main": [
+        [
+          {
+            "node": "Send EOD Summary Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule — Friday 5PM Weekly Report": {
+      "main": [
+        [
+          {
+            "node": "Fetch Weekly Data from Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Weekly Data from Sheet": {
+      "main": [
+        [
+          {
+            "node": "Compose Weekly Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compose Weekly Report": {
+      "main": [
+        [
+          {
+            "node": "Send Weekly Report Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mistral Cloud Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Email Classifier",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule — Status Check Every 30 Min": {
+      "main": [
+        [
+          {
+            "node": "Read Pending Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Pending Rows": {
+      "main": [
+        [
+          {
+            "node": "Search Gmail for Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Gmail for Reply": {
+      "main": [
+        [
+          {
+            "node": "Has Reply?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Reply?": {
+      "main": [
+        [
+          {
+            "node": "AI Classify Reply Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Classify Reply Intent": {
+      "main": [
+        [
+          {
+            "node": "Parse Status Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Model (Status)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Classify Reply Intent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Classify Reply Intent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Status Result": {
+      "main": [
+        [
+          {
+            "node": "Status Changed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Status Changed?": {
+      "main": [
+        [
+          {
+            "node": "Update Status in Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Status in Sheet": {
+      "main": [
+        [
+          {
+            "node": "Send Status Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "e0fb53df-dc9f-4bd4-a7c4-dae99062d4ab",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "templateCredsSetupCompleted": true,
+    "instanceId": "YOUR_INSTANCEID_HERE"
+  },
+  "nodeGroups": [],
+  "id": "NjFU9SWzncO8pASC",
+  "tags": []
+}
